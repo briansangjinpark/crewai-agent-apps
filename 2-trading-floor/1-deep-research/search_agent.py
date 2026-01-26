@@ -22,12 +22,4 @@ search_agent = Agent(
     model_settings=ModelSettings(tool_choice="required"),
 )
 
-async def main():
-    with trace("Search"):
-        result = await Runner.run(search_agent, RESEARCH_TOPIC)
 
-    print(result.final_output)
-
-if __name__ == "__main__":
-    from research_config import RESEARCH_TOPIC
-    asyncio.run(main())

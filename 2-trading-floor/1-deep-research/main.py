@@ -2,9 +2,10 @@ from dotenv import load_dotenv
 from agents import Agent, Runner, WebSearchTool, ModelSettings, trace
 from pydantic import BaseModel
 import asyncio
-from planner_agent import planner_agent, WebSearchPlan, WebSearchItem
+from planner_agent import planner_agent
 from search_agent import search_agent
 from writer_agent import writer_agent
+from models import WebSearchItem, WebSearchPlan, ReportData
 
 load_dotenv(override=True)
 

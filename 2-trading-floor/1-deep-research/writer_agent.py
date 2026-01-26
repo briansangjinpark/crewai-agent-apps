@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 from agents import Agent, Runner, trace
 from pydantic import BaseModel
 import asyncio
+from models import ReportData
 
 load_dotenv(override=True)
 
@@ -14,29 +15,9 @@ INSTRUCTIONS = (
     "for 5-10 pages of content, at least 1000 words."
 )
 
-class ReportData(BaseModel):
-    short_summary: str
-    """A short 2-3 sentence summary of the findings."""
-
-    markdown_report: str
-    """The final report"""
-
-    follow_up_questions: list[str]
-    """Suggested topics to research further"""
-
 writer_agent = Agent(
     name="WriterAgent",
     instructions=INSTRUCTIONS,
     model="gpt-4o-mini",
     output_type=ReportData,
 )
-
-async def main():
-    with trace("Writer"):
-        report = await Runner.run(writer_agent, RESEARCH_TOPIC)
-
-    print(report.final_output)
-
-if __name__ == "__main__":
-    from research_config import RESEARCH_TOPIC
-    asyncio.run(main())
