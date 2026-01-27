@@ -1,38 +1,46 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Search, Sparkles } from "lucide-react";
 import LoadingOverlay from "@/components/LoadingOverlay";
+import { useResearchStream } from "@/hooks/useResearchStream";
 
 export default function Home() {
   const router = useRouter();
   const [topic, setTopic] = useState("");
+  const [taskId, setTaskId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState("");
 
-  const steps = [
-    "Analyzing request...",
-    "Planning research strategy...",
-    "Searching the web...",
-    "Reading and synthesizing...",
-    "Generating report..."
-  ];
+  // Use the SSE hook for real-time progress
+  const { progress } = useResearchStream(taskId);
+
+  // Update status based on real-time progress
+  useEffect(() => {
+    if (progress) {
+      setStatus(progress.current_step);
+
+      if (progress.status === "completed" && progress.result) {
+        // Store report and navigate
+        localStorage.setItem("researchReport", progress.result);
+        localStorage.setItem("researchTopic", topic);
+        setIsLoading(false);
+        router.push("/report");
+      } else if (progress.status === "failed") {
+        setIsLoading(false);
+        alert(`Research failed: ${progress.error || "Unknown error"}`);
+        setTaskId(null);
+      }
+    }
+  }, [progress, router, topic]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!topic.trim()) return;
 
     setIsLoading(true);
-
-    // Simulate steps progress for better UX
-    let stepIndex = 0;
-    setStatus(steps[0]);
-
-    const interval = setInterval(() => {
-      stepIndex = (stepIndex + 1) % steps.length;
-      setStatus(steps[stepIndex]);
-    }, 3000);
+    setStatus("Starting research...");
 
     try {
       const response = await fetch("http://127.0.0.1:8000/research", {
@@ -44,22 +52,15 @@ export default function Home() {
       });
 
       if (!response.ok) {
-        throw new Error("Research failed");
+        throw new Error("Failed to start research");
       }
 
       const data = await response.json();
-
-      // Store report in localStorage to pass to report page
-      localStorage.setItem("researchReport", data.report);
-      localStorage.setItem("researchTopic", topic);
-
-      router.push("/report");
+      setTaskId(data.task_id);
     } catch (error) {
       console.error(error);
-      alert("Failed to generate report. Please try again.");
+      alert("Failed to start research. Please try again.");
       setIsLoading(false);
-    } finally {
-      clearInterval(interval);
     }
   };
 

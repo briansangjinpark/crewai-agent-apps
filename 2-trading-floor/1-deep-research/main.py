@@ -16,12 +16,31 @@ async def plan_searches(query: str):
     print(f"Will perform {len(result.final_output.searches)} searches") 
     return result.final_output
 
-async def perform_searches(search_plan: WebSearchPlan): 
+async def perform_searches(search_plan: WebSearchPlan):
     """ Call search() for each item in the search plan """
     print("Searching...")
     tasks = [asyncio.create_task(search(item)) for item in search_plan.searches]
     results = await asyncio.gather(*tasks)
     print("Finished searching")
+    return results
+
+async def perform_searches_with_progress(search_plan: WebSearchPlan, task_id: str, task_manager):
+    """Perform searches with granular progress updates"""
+    results = []
+    total = len(search_plan.searches)
+
+    for idx, item in enumerate(search_plan.searches):
+        # Update progress for each search
+        percent = 30 + int((idx / total) * 35)  # 30-65% range for searches
+        await task_manager.update_task(
+            task_id,
+            current_step=f"Searching: {item.query} ({idx + 1}/{total})",
+            percent=percent
+        )
+
+        result = await search(item)
+        results.append(result)
+
     return results
 
 async def search(item: WebSearchItem):
