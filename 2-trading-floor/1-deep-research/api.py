@@ -7,6 +7,7 @@ import uuid
 import json
 
 from core.task_manager import task_manager
+from core.cache import cache
 
 app = FastAPI()
 
@@ -163,6 +164,19 @@ async def health():
     return {"status": "ok"}
 
 
+@app.get("/cache/stats")
+async def cache_stats():
+    """Get cache statistics"""
+    return cache.get_stats()
+
+
+@app.post("/cache/clear")
+async def clear_cache():
+    """Clear the entire cache"""
+    await cache.clear()
+    return {"status": "cache cleared"}
+
+
 # Periodic cleanup task
 @app.on_event("startup")
 async def startup_event():
@@ -171,8 +185,15 @@ async def startup_event():
     async def cleanup_loop():
         while True:
             await asyncio.sleep(600)  # Every 10 minutes
-            removed = task_manager.cleanup_old_tasks(max_age_minutes=60)
-            if removed > 0:
-                print(f"Cleaned up {removed} old tasks")
+
+            # Cleanup old tasks
+            removed_tasks = task_manager.cleanup_old_tasks(max_age_minutes=60)
+            if removed_tasks > 0:
+                print(f"Cleaned up {removed_tasks} old tasks")
+
+            # Cleanup expired cache entries
+            removed_cache = await cache.cleanup_expired()
+            if removed_cache > 0:
+                print(f"Cleaned up {removed_cache} expired cache entries")
 
     asyncio.create_task(cleanup_loop())

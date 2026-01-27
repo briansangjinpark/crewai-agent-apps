@@ -6,15 +6,29 @@ from planner_agent import planner_agent
 from search_agent import search_agent
 from writer_agent import writer_agent
 from models import WebSearchItem, WebSearchPlan, ReportData
+from core.cache import cache
 
 load_dotenv(override=True)
 
 async def plan_searches(query: str):
     """ Use the planner_agent to plan which searches to run for the query """
-    print("Planning searches...")
-    result = await Runner.run(planner_agent, f"Query: {query}")
-    print(f"Will perform {len(result.final_output.searches)} searches") 
-    return result.final_output
+    cache_key = cache._generate_key("plan", query)
+
+    async def compute():
+        print("Planning searches...")
+        result = await Runner.run(planner_agent, f"Query: {query}")
+        print(f"Will perform {len(result.final_output.searches)} searches")
+        return result.final_output.model_dump()
+
+    # Check cache first, compute if not found
+    cached_result = await cache.get_or_compute(cache_key, compute, ttl=3600)
+
+    # If we got cached result, it's a dict - convert back to WebSearchPlan
+    if isinstance(cached_result, dict):
+        print(f"[CACHE HIT] Using cached search plan for query")
+        return WebSearchPlan(**cached_result)
+
+    return cached_result
 
 async def perform_searches(search_plan: WebSearchPlan):
     """ Call search() for each item in the search plan """
@@ -45,8 +59,20 @@ async def perform_searches_with_progress(search_plan: WebSearchPlan, task_id: st
 
 async def search(item: WebSearchItem):
     """ Use the search agent to run a web search for each item in the search plan """
+    cache_key = cache._generate_key("search", item.query)
+
+    # Check if cached
+    cached = await cache.get(cache_key)
+    if cached:
+        print(f"[CACHE HIT] Using cached search result for: {item.query}")
+        return cached
+
+    # Compute and cache
+    print(f"[CACHE MISS] Searching for: {item.query}")
     input = f"Search term: {item.query}\nReason for search: {item.reason}"
     result = await Runner.run(search_agent, input)
+    await cache.set(cache_key, result.final_output, ttl=7200)
+
     return result.final_output
 
 async def write_report(query: str, search_results: list[str]):
