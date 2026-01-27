@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from pydantic import BaseModel
 import asyncio
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,6 +8,7 @@ import json
 
 from core.task_manager import task_manager
 from core.cache import cache
+from api.middleware.rate_limit import rate_limiter
 
 app = FastAPI()
 
@@ -19,6 +20,30 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Rate limiting middleware
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    """Apply rate limiting to research endpoints"""
+    if request.url.path.startswith("/research") and request.method == "POST":
+        client_id = request.client.host if request.client else "unknown"
+        allowed, info = rate_limiter.check_rate_limit(client_id)
+
+        if not allowed:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate limit exceeded. Try again in {info['retry_after']}s. "
+                       f"Limit: {info['limit']} requests per minute.",
+                headers={
+                    "X-RateLimit-Limit": str(info['limit']),
+                    "X-RateLimit-Remaining": str(info['remaining']),
+                    "Retry-After": str(info['retry_after'])
+                }
+            )
+
+    response = await call_next(request)
+    return response
 
 
 class ResearchRequest(BaseModel):
@@ -175,6 +200,19 @@ async def clear_cache():
     """Clear the entire cache"""
     await cache.clear()
     return {"status": "cache cleared"}
+
+
+@app.get("/rate-limit/stats")
+async def rate_limit_stats():
+    """Get rate limiter statistics"""
+    return rate_limiter.get_stats()
+
+
+@app.get("/circuit-breakers")
+async def circuit_breakers_status():
+    """Get status of all circuit breakers"""
+    from utils.retry import get_all_breaker_states
+    return get_all_breaker_states()
 
 
 # Periodic cleanup task

@@ -7,6 +7,7 @@ from search_agent import search_agent
 from writer_agent import writer_agent
 from models import WebSearchItem, WebSearchPlan, ReportData
 from core.cache import cache
+from utils.retry import call_agent_with_retry, planner_breaker, searcher_breaker, writer_breaker
 
 load_dotenv(override=True)
 
@@ -16,7 +17,12 @@ async def plan_searches(query: str):
 
     async def compute():
         print("Planning searches...")
-        result = await Runner.run(planner_agent, f"Query: {query}")
+        result = await call_agent_with_retry(
+            planner_agent,
+            f"Query: {query}",
+            planner_breaker,
+            max_retries=3
+        )
         print(f"Will perform {len(result.final_output.searches)} searches")
         return result.final_output.model_dump()
 
@@ -70,7 +76,12 @@ async def search(item: WebSearchItem):
     # Compute and cache
     print(f"[CACHE MISS] Searching for: {item.query}")
     input = f"Search term: {item.query}\nReason for search: {item.reason}"
-    result = await Runner.run(search_agent, input)
+    result = await call_agent_with_retry(
+        search_agent,
+        input,
+        searcher_breaker,
+        max_retries=3
+    )
     await cache.set(cache_key, result.final_output, ttl=7200)
 
     return result.final_output
@@ -79,7 +90,12 @@ async def write_report(query: str, search_results: list[str]):
     """ Use the writer_agent to write a report based on the search results """
     print("Thinking about report...")
     input = f"Original query: {query}\nSummarized search results: {search_results}"
-    result = await Runner.run(writer_agent, input)
+    result = await call_agent_with_retry(
+        writer_agent,
+        input,
+        writer_breaker,
+        max_retries=3
+    )
     print("Finished writing report")
     print(f"\n--- Report ---\n{result.final_output.markdown_report}\n--------------")
     return result.final_output
