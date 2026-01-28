@@ -1,0 +1,10 @@
+code_task:
+  description: >
+    Write a python module that achieves the requirements. 
+    Here are the requirements: {requirements}
+  expected output: >
+    A python module that implements the design and achieves the requirements.
+    IMPORTANT: Output ONLY the raw python code without any markdown formattting, code block delimiters, or backticks.
+    The output should be valid python code that can be directly saved to a file and executed. 
+  agent: backend_engineer
+  output_file: output/{module_name}
